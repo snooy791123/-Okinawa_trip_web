@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Okinawa 2026 | Interactive Itinerary</title>
     
     <!-- Fonts -->
@@ -44,6 +44,7 @@
                         'soft': '0 10px 40px rgba(91, 146, 165, 0.08)',
                         'card': '2px 4px 12px rgba(0,0,0,0.04)',
                         'card-hover': '4px 12px 30px rgba(91, 146, 165, 0.12)',
+                        'nav-mobile': '0 -4px 20px rgba(31, 63, 73, 0.05)',
                     }
                 }
             }
@@ -58,6 +59,8 @@
             overflow-x: hidden;
             display: flex;
             min-height: 100vh;
+            /* Prevent pull-to-refresh on mobile for app-like feel */
+            overscroll-behavior-y: none;
         }
 
         body::before {
@@ -82,10 +85,14 @@
             max-height: 400px;
         }
 
-        /* Custom Scrollbar for inner areas */
+        /* Custom Scrollbars */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(31, 63, 73, 0.2); border-radius: 10px; }
+        
+        /* Hide Scrollbar for Mobile Nav */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
         /* Organic Shapes */
         .shape-blob { border-radius: 4px 20px 5px 18px / 18px 5px 20px 4px; }
@@ -108,49 +115,35 @@
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Mobile Sidebar overlay */
-        @media (max-width: 768px) {
-            #sidebar { transform: translateX(-100%); transition: transform 0.3s ease-in-out; position: fixed; z-index: 50; }
-            #sidebar.open { transform: translateX(0); }
-            #overlay { display: none; }
-            #overlay.open { display: block; }
-        }
+        /* iOS Safe Area Support for Bottom Nav */
+        .pb-safe { padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
     </style>
-
-    <!-- Chosen Palette: Watercolor Island (Warm neutrals, Ink blue, Ocean/Mint/Sand accents) -->
-    <!-- Application Structure Plan: Sidebar/Main Content SPA. Overview for practicals (countdown, weather, currency). Checklist for prep. Day views for detailed timeline and location exploring. -->
-    <!-- Visualization & Content Choices: Line chart for temp trends. Timeline for daily itinerary. Grid cards for places exploration. -->
-    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 </head>
 <body class="flex flex-col md:flex-row">
 
-    <!-- Mobile Header & Hamburger -->
-    <header class="md:hidden bg-paper/90 backdrop-blur-md border-b border-ocean/10 p-4 flex justify-between items-center sticky top-0 z-40">
-        <div class="font-heading font-black text-xl text-ink">Okinawa 2026</div>
-        <button id="menuBtn" class="text-ink text-2xl focus:outline-none"><i class="fas fa-bars"></i></button>
+    <!-- Mobile Header (Simplified) -->
+    <header class="md:hidden bg-paper/90 backdrop-blur-md border-b border-ocean/10 p-4 flex justify-center items-center sticky top-0 z-40">
+        <div class="font-heading font-black text-xl text-ink">Okinawa 2026 🏝️</div>
     </header>
 
-    <!-- Mobile Overlay -->
-    <div id="overlay" class="fixed inset-0 bg-ink/20 z-40 backdrop-blur-sm hidden md:hidden"></div>
-
-    <!-- Sidebar Navigation -->
-    <nav id="sidebar" class="w-64 bg-paperDark/50 border-r border-ocean/10 h-screen overflow-y-auto custom-scrollbar flex-shrink-0 flex flex-col p-6 shadow-soft md:sticky md:top-0">
-        <div class="hidden md:block mb-8">
+    <!-- Sidebar Navigation (Desktop Only) -->
+    <nav id="sidebar" class="hidden md:flex w-64 bg-paperDark/50 border-r border-ocean/10 h-screen overflow-y-auto custom-scrollbar flex-shrink-0 flex-col p-6 shadow-soft sticky top-0">
+        <div class="mb-8">
             <h1 class="font-heading font-black text-2xl text-ink leading-tight">Okinawa<br><span class="text-ocean text-lg">夏日海島紀行</span></h1>
             <p class="font-serif text-sand font-bold mt-2 tracking-widest text-sm">2026.07.02 - 07.06</p>
         </div>
 
         <div class="space-y-1 font-heading text-sm font-bold text-ink/70">
             <div class="uppercase text-xs tracking-widest text-ink/40 mb-2 mt-4 font-sans">Dashboard</div>
-            <button class="nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3 active-nav" data-target="view-overview">
+            <button class="nav-btn sidebar-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3 active-sidebar" data-target="view-overview">
                 <i class="fas fa-compass text-sand w-5 text-center"></i> 總覽與實用資訊
             </button>
-            <button class="nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3" data-target="view-checklist">
+            <button class="nav-btn sidebar-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3" data-target="view-checklist">
                 <i class="fas fa-suitcase-rolling text-coral w-5 text-center"></i> 出發前準備清單
             </button>
 
             <div class="uppercase text-xs tracking-widest text-ink/40 mb-2 mt-6 font-sans">Itinerary</div>
-            <div id="nav-days-container">
+            <div id="sidebar-days-container">
                 <!-- Dynamically populated -->
             </div>
         </div>
@@ -161,7 +154,7 @@
     </nav>
 
     <!-- Main Content Area -->
-    <main class="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8 lg:p-12 relative" id="main-content">
+    <main class="flex-1 overflow-y-auto custom-scrollbar p-4 pb-24 md:p-8 lg:p-12 relative" id="main-content">
         
         <!-- View: Overview -->
         <section id="view-overview" class="view-section active max-w-5xl mx-auto">
@@ -278,12 +271,28 @@
                 </div>
             </div>
         </section>
-
     </main>
+
+    <!-- Mobile Bottom Navigation (App-like feel) -->
+    <nav id="mobile-nav" class="md:hidden fixed bottom-0 left-0 right-0 bg-paper/95 backdrop-blur-xl border-t border-ocean/10 z-50 flex overflow-x-auto no-scrollbar px-3 pt-2 pb-safe items-center gap-2 shadow-nav-mobile snap-x snap-mandatory">
+        <!-- Static Items -->
+        <button class="nav-btn mobile-btn snap-center flex-shrink-0 flex flex-col items-center justify-center w-[4.5rem] h-14 rounded-xl text-ink/50 hover:bg-white transition-all active-mobile" data-target="view-overview">
+            <i class="fas fa-compass text-lg mb-1"></i>
+            <span class="text-[0.65rem] font-bold font-sans tracking-wide">總覽</span>
+        </button>
+        <button class="nav-btn mobile-btn snap-center flex-shrink-0 flex flex-col items-center justify-center w-[4.5rem] h-14 rounded-xl text-ink/50 hover:bg-white transition-all" data-target="view-checklist">
+            <i class="fas fa-suitcase-rolling text-lg mb-1"></i>
+            <span class="text-[0.65rem] font-bold font-sans tracking-wide">清單</span>
+        </button>
+        
+        <div class="w-px h-8 bg-ocean/20 flex-shrink-0 mx-1"></div> <!-- Divider -->
+
+        <!-- Day Items will be injected here by JS -->
+    </nav>
 
     <!-- Application Logic & Data -->
     <script>
-        // --- 1. Data Definitions (Updated with 10 places per day) ---
+        // --- 1. Data Definitions ---
         const DAYS_DATA = [
             {
                 id: 'day1', num: '01', date: '7月2日', color: 'ocean', hex: '#5B92A5',
@@ -435,46 +444,71 @@
 
         // --- 3. Initialization & Navigation ---
         document.addEventListener('DOMContentLoaded', () => {
-            initSidebar();
+            initNavigation();
             initOverview();
             renderChecklist();
             
-            // Setup Nav Clicks
+            // Setup Nav Clicks for both Desktop Sidebar and Mobile Bottom Nav
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const target = e.currentTarget.dataset.target;
                     const dayId = e.currentTarget.dataset.day;
                     
-                    // Update UI active states
-                    document.querySelectorAll('.nav-btn').forEach(b => {
-                        b.classList.remove('active-nav', 'bg-white', 'shadow-card', 'text-ink');
+                    // 1. Update Desktop Sidebar UI
+                    document.querySelectorAll('.sidebar-btn').forEach(b => {
+                        b.classList.remove('active-sidebar', 'bg-white', 'shadow-card', 'text-ink');
                         b.classList.add('text-ink/70');
                     });
-                    e.currentTarget.classList.add('active-nav', 'bg-white', 'shadow-card', 'text-ink');
-                    e.currentTarget.classList.remove('text-ink/70');
+                    
+                    // 2. Update Mobile Bottom Nav UI
+                    document.querySelectorAll('.mobile-btn').forEach(b => {
+                        b.classList.remove('active-mobile', 'bg-white', 'shadow-sm', 'text-ink', 'scale-105');
+                        b.classList.add('text-ink/50');
+                    });
+
+                    // Sync corresponding buttons
+                    const matchingBtns = document.querySelectorAll(`.nav-btn[data-target="${target}"]${dayId ? `[data-day="${dayId}"]` : ':not([data-day])'}`);
+                    matchingBtns.forEach(b => {
+                        if(b.classList.contains('sidebar-btn')) {
+                            b.classList.add('active-sidebar', 'bg-white', 'shadow-card', 'text-ink');
+                            b.classList.remove('text-ink/70');
+                        } else if (b.classList.contains('mobile-btn')) {
+                            b.classList.add('active-mobile', 'bg-white', 'shadow-sm', 'text-ink', 'scale-105');
+                            b.classList.remove('text-ink/50');
+                            // Ensure the clicked item is scrolled into view (Mobile friendly)
+                            b.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+                        }
+                    });
 
                     // Handle View Switching
                     switchView(target, dayId);
-
-                    // Close mobile menu
-                    if(window.innerWidth <= 768) toggleMobileMenu();
                 });
             });
-
-            // Mobile menu toggles
-            document.getElementById('menuBtn').addEventListener('click', toggleMobileMenu);
-            document.getElementById('overlay').addEventListener('click', toggleMobileMenu);
         });
 
-        function initSidebar() {
-            const container = document.getElementById('nav-days-container');
+        function initNavigation() {
+            const sidebarContainer = document.getElementById('sidebar-days-container');
+            const mobileNavContainer = document.getElementById('mobile-nav');
+
             DAYS_DATA.forEach(day => {
-                const btn = document.createElement('button');
-                btn.className = `nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3 text-ink/70 font-sans text-sm`;
-                btn.dataset.target = 'view-day';
-                btn.dataset.day = day.id;
-                btn.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-${day.color} shadow-sm border border-white"></span> <span class="font-bold">${day.date}</span> <span class="truncate">${day.title.split('與')[0]}</span>`;
-                container.appendChild(btn);
+                // Populate Desktop Sidebar
+                const sBtn = document.createElement('button');
+                sBtn.className = `nav-btn sidebar-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3 text-ink/70 font-sans text-sm`;
+                sBtn.dataset.target = 'view-day';
+                sBtn.dataset.day = day.id;
+                sBtn.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-${day.color} shadow-sm border border-white"></span> <span class="font-bold">${day.date}</span> <span class="truncate">${day.title.split('與')[0]}</span>`;
+                sidebarContainer.appendChild(sBtn);
+
+                // Populate Mobile Bottom Nav
+                const mBtn = document.createElement('button');
+                mBtn.className = `nav-btn mobile-btn snap-center flex-shrink-0 flex flex-col items-center justify-center w-[4.5rem] h-14 rounded-xl text-ink/50 hover:bg-white transition-all`;
+                mBtn.dataset.target = 'view-day';
+                mBtn.dataset.day = day.id;
+                mBtn.innerHTML = `
+                    <span class="text-[0.8rem] font-mono font-bold text-${day.color} leading-none mb-1 shadow-sm">D${day.num}</span>
+                    <span class="text-[0.6rem] font-bold font-sans tracking-tight">${day.date.split('月')[1]}</span>
+                `;
+                mobileNavContainer.appendChild(mBtn);
             });
         }
 
@@ -493,18 +527,13 @@
                 renderDayView(dayId);
             }
             
-            // Scroll to top
+            // Scroll to top of main content
             document.getElementById('main-content').scrollTop = 0;
-        }
-
-        function toggleMobileMenu() {
-            document.getElementById('sidebar').classList.toggle('open');
-            document.getElementById('overlay').classList.toggle('open');
+            window.scrollTo(0,0);
         }
 
         // --- 4. Overview Logic (APIs & Chart) ---
         function initOverview() {
-            // Countdown
             const targetDate = new Date('2026-07-02T00:00:00+08:00').getTime();
             setInterval(() => {
                 const now = new Date().getTime();
@@ -512,14 +541,12 @@
                 document.getElementById('countdown-display').innerText = d > 0 ? `${d} Days` : '出發！';
             }, 1000);
 
-            // Fetch APIs
             fetchWeatherAndMarine();
             fetchCurrency();
         }
 
         async function fetchWeatherAndMarine() {
             try {
-                // Using Open-Meteo for Naha
                 const url = 'https://api.open-meteo.com/v1/forecast?latitude=26.2124&longitude=127.6809&daily=temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo';
                 const marineUrl = 'https://marine-api.open-meteo.com/v1/marine?latitude=26.2124&longitude=127.6809&daily=wave_height_max&timezone=Asia%2FTokyo';
                 
@@ -537,7 +564,7 @@
 
         function renderWeatherChart(data) {
             const ctx = document.getElementById('weatherChart').getContext('2d');
-            const dates = data.time.map(d => d.slice(5).replace('-','/')); // MM/DD
+            const dates = data.time.map(d => d.slice(5).replace('-','/'));
             
             new Chart(ctx, {
                 type: 'line',
@@ -547,7 +574,7 @@
                         {
                             label: '最高溫 (°C)',
                             data: data.temperature_2m_max,
-                            borderColor: '#E48E8C', // coral
+                            borderColor: '#E48E8C',
                             backgroundColor: 'rgba(228, 142, 140, 0.1)',
                             borderWidth: 3,
                             tension: 0.4,
@@ -557,7 +584,7 @@
                         {
                             label: '最低溫 (°C)',
                             data: data.temperature_2m_min,
-                            borderColor: '#5B92A5', // ocean
+                            borderColor: '#5B92A5',
                             borderWidth: 2,
                             borderDash: [5, 5],
                             tension: 0.4,
@@ -659,10 +686,8 @@
         window.handleCheck = function(cb) {
             state.checklist[cb.dataset.id] = cb.checked;
             localStorage.setItem('ok_checklist', JSON.stringify(state.checklist));
-            // Toggle visual class on parent label
             cb.parentElement.classList.toggle('checked-item', cb.checked);
             
-            // Recalc
             const total = document.querySelectorAll('#checklist-container input[type="checkbox"]').length;
             const checked = document.querySelectorAll('#checklist-container input[type="checkbox"]:checked').length;
             updateProgress(checked, total);
@@ -679,7 +704,6 @@
             const day = DAYS_DATA.find(d => d.id === dayId);
             if(!day) return;
 
-            // 1. Header
             document.getElementById('day-header').innerHTML = `
                 <div class="w-20 h-20 bg-${day.color} text-white rounded-2xl shadow-md flex flex-col items-center justify-center flex-shrink-0 transform rotate-3">
                     <span class="font-heading font-black text-2xl leading-none">${day.num}</span>
@@ -692,7 +716,6 @@
                 </div>
             `;
 
-            // 2. Timeline
             const tlContainer = document.getElementById('day-timeline');
             tlContainer.innerHTML = day.itinerary.map(it => `
                 <div class="timeline-item relative pl-10">
@@ -706,7 +729,6 @@
                 </div>
             `).join('');
 
-            // 3. Places setup
             setupPlaceFilters(day);
             renderPlaces(day);
         }
@@ -726,7 +748,6 @@
                     renderPlaces(day);
                 };
             });
-            // Reset to 'all' visually on day change
             filterBtns[0].click(); 
         }
 
