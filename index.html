@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Okinawa 2026 | Interactive Itinerary</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Shippori+Mincho:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink: '#1F3F49',
+                        paper: '#FBF9F6',
+                        paperDark: '#F0EBE1',
+                        ocean: '#5B92A5',
+                        mint: '#679B83',
+                        sand: '#D4A373',
+                        coral: '#E48E8C',
+                        sky: '#84BACC',
+                    },
+                    fontFamily: {
+                        sans: ['Noto Sans TC', 'sans-serif'],
+                        heading: ['Zen Maru Gothic', 'sans-serif'],
+                        serif: ['Shippori Mincho', 'serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    boxShadow: {
+                        'soft': '0 10px 40px rgba(91, 146, 165, 0.08)',
+                        'card': '2px 4px 12px rgba(0,0,0,0.04)',
+                        'card-hover': '4px 12px 30px rgba(91, 146, 165, 0.12)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Base Styles & Texture */
+        body {
+            background-color: theme('colors.paper');
+            color: theme('colors.ink');
+            overflow-x: hidden;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: -1;
+            opacity: 0.6;
+        }
+
+        /* Chart Container Requirements */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 30vh;
+            min-height: 250px;
+            max-height: 400px;
+        }
+
+        /* Custom Scrollbar for inner areas */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(31, 63, 73, 0.2); border-radius: 10px; }
+        
+        /* Organic Shapes */
+        .shape-blob { border-radius: 4px 20px 5px 18px / 18px 5px 20px 4px; }
+        .shape-card { border-radius: 8px 255px 12px 25px / 255px 12px 225px 8px; }
+        
+        /* Checkbox styling */
+        input[type="checkbox"] { accent-color: theme('colors.mint'); cursor: pointer; }
+        .checked-item span { text-decoration: line-through; color: rgba(31, 63, 73, 0.4); }
+
+        /* Timeline Line */
+        .timeline-line::before {
+            content: ''; position: absolute; left: 1.1rem; top: 2.5rem; bottom: -1rem;
+            width: 2px; border-left: 2px dashed rgba(91, 146, 165, 0.3);
+        }
+        .timeline-item:last-child .timeline-line::before { display: none; }
+
+        /* Hide elements for SPA logic */
+        .view-section { display: none; animation: fadeIn 0.4s ease-out; }
+        .view-section.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Mobile Sidebar overlay */
+        @media (max-width: 768px) {
+            #sidebar { transform: translateX(-100%); transition: transform 0.3s ease-in-out; position: fixed; z-index: 50; }
+            #sidebar.open { transform: translateX(0); }
+            #overlay { display: none; }
+            #overlay.open { display: block; }
+        }
+    </style>
+
+    <!-- Chosen Palette: Watercolor Island (Warm neutrals, Ink blue, Ocean/Mint/Sand accents) -->
+    <!-- Application Structure Plan: Sidebar/Main Content SPA. Overview for practicals (countdown, weather, currency). Checklist for prep. Day views for detailed timeline and location exploring. -->
+    <!-- Visualization & Content Choices: Line chart for temp trends. Timeline for daily itinerary. Grid cards for places exploration. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="flex flex-col md:flex-row">
+
+    <!-- Mobile Header & Hamburger -->
+    <header class="md:hidden bg-paper/90 backdrop-blur-md border-b border-ocean/10 p-4 flex justify-between items-center sticky top-0 z-40">
+        <div class="font-heading font-black text-xl text-ink">Okinawa 2026</div>
+        <button id="menuBtn" class="text-ink text-2xl focus:outline-none"><i class="fas fa-bars"></i></button>
+    </header>
+
+    <!-- Mobile Overlay -->
+    <div id="overlay" class="fixed inset-0 bg-ink/20 z-40 backdrop-blur-sm hidden md:hidden"></div>
+
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar" class="w-64 bg-paperDark/50 border-r border-ocean/10 h-screen overflow-y-auto custom-scrollbar flex-shrink-0 flex flex-col p-6 shadow-soft md:sticky md:top-0">
+        <div class="hidden md:block mb-8">
+            <h1 class="font-heading font-black text-2xl text-ink leading-tight">Okinawa<br><span class="text-ocean text-lg">夏日海島紀行</span></h1>
+            <p class="font-serif text-sand font-bold mt-2 tracking-widest text-sm">2026.07.02 - 07.06</p>
+        </div>
+
+        <div class="space-y-1 font-heading text-sm font-bold text-ink/70">
+            <div class="uppercase text-xs tracking-widest text-ink/40 mb-2 mt-4 font-sans">Dashboard</div>
+            <button class="nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3 active-nav" data-target="view-overview">
+                <i class="fas fa-compass text-sand w-5 text-center"></i> 總覽與實用資訊
+            </button>
+            <button class="nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3" data-target="view-checklist">
+                <i class="fas fa-suitcase-rolling text-coral w-5 text-center"></i> 出發前準備清單
+            </button>
+
+            <div class="uppercase text-xs tracking-widest text-ink/40 mb-2 mt-6 font-sans">Itinerary</div>
+            <div id="nav-days-container">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+
+        <div class="mt-auto pt-8 pb-4 text-center">
+            <div class="text-xs font-serif text-ink/40">めんそーれ 沖縄</div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8 lg:p-12 relative" id="main-content">
+        
+        <!-- View: Overview -->
+        <section id="view-overview" class="view-section active max-w-5xl mx-auto">
+            <div class="mb-10">
+                <h2 class="font-heading font-black text-3xl md:text-5xl text-ink mb-4 relative inline-block">
+                    準備出發！<span class="block text-ocean text-lg mt-2">Trip Overview</span>
+                    <div class="absolute -bottom-2 left-0 w-full h-3 bg-sand/30 -z-10 transform -rotate-1"></div>
+                </h2>
+                <p class="font-sans text-ink/70 max-w-2xl mt-4">歡迎來到沖繩之旅儀表板。這裡匯集了旅行前與旅途中的實用資訊，包含天氣趨勢、即時海象與匯率換算，讓您隨時掌握當地狀況。</p>
+            </div>
+
+            <!-- Countdown -->
+            <div class="bg-ink text-white p-6 rounded-2xl shadow-soft shape-blob text-center mb-10 max-w-md mx-auto transform hover:scale-105 transition-transform">
+                <div class="font-serif text-sand mb-2 tracking-widest text-sm">COUNTDOWN</div>
+                <div id="countdown-display" class="font-mono font-bold text-2xl md:text-3xl">載入中...</div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Weather Chart Card -->
+                <div class="bg-white/80 backdrop-blur-md p-6 rounded-2xl shadow-soft border border-white/50 lg:col-span-2">
+                    <div class="flex justify-between items-center mb-6 border-b border-ocean/10 pb-4">
+                        <h3 class="font-heading font-bold text-lg text-ink"><i class="fas fa-cloud-sun text-ocean mr-2"></i>那霸市近期氣溫趨勢</h3>
+                        <span class="text-xs font-bold text-sand bg-sand/10 px-3 py-1 rounded-full">Open-Meteo</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="weatherChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Marine Forecast -->
+                <div class="bg-white/80 backdrop-blur-md p-6 rounded-2xl shadow-soft border border-white/50">
+                    <h3 class="font-heading font-bold text-lg text-ink mb-4 border-b border-ocean/10 pb-2"><i class="fas fa-water text-sky mr-2"></i>近期海浪預報</h3>
+                    <p class="text-xs text-ink/50 mb-4">潛水與水上活動參考。浪高 < 1m 較適宜。</p>
+                    <div id="marine-data" class="flex gap-4 overflow-x-auto custom-scrollbar pb-2">
+                        <div class="text-sm text-ink/50"><i class="fas fa-spinner fa-spin"></i> 載入中...</div>
+                    </div>
+                </div>
+
+                <!-- Currency -->
+                <div class="bg-white/80 backdrop-blur-md p-6 rounded-2xl shadow-soft border border-white/50">
+                    <div class="flex justify-between items-center mb-4 border-b border-ocean/10 pb-2">
+                        <h3 class="font-heading font-bold text-lg text-ink"><i class="fas fa-yen-sign text-sand mr-2"></i>即時匯率換算</h3>
+                        <span id="rateUpdate" class="text-xs font-bold text-ink/40">更新中...</span>
+                    </div>
+                    <div class="space-y-4 mt-6">
+                        <div class="flex items-center bg-paperDark rounded-xl p-3 border border-ocean/10">
+                            <span class="font-mono font-black text-sand text-lg w-10 text-center">¥</span>
+                            <input type="number" id="jpyInput" class="bg-transparent font-mono font-bold text-xl text-ink w-full outline-none" placeholder="輸入日幣" value="1000">
+                        </div>
+                        <div class="text-center text-ink/30"><i class="fas fa-arrow-down"></i></div>
+                        <div class="flex items-center bg-paperDark rounded-xl p-3 border border-ocean/10">
+                            <span class="font-mono font-black text-ocean text-lg w-10 text-center">NT$</span>
+                            <input type="text" id="twdOutput" class="bg-transparent font-mono font-bold text-xl text-ink w-full outline-none" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- View: Checklist -->
+        <section id="view-checklist" class="view-section max-w-5xl mx-auto">
+            <div class="mb-10">
+                <h2 class="font-heading font-black text-3xl md:text-5xl text-ink mb-4">行前準備清單</h2>
+                <p class="font-sans text-ink/70 max-w-2xl">為了確保旅途順利，請核對以下必備物品。點擊項目即可標記完成，進度將會自動更新。</p>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="bg-white p-4 rounded-xl shadow-card mb-8 sticky top-0 z-10 border border-ocean/10">
+                <div class="flex justify-between text-sm font-bold mb-2">
+                    <span class="text-ink">準備進度</span>
+                    <span id="progress-text" class="text-mint">0%</span>
+                </div>
+                <div class="w-full bg-paperDark rounded-full h-2.5">
+                    <div id="progress-bar" class="bg-mint h-2.5 rounded-full transition-all duration-500 w-0"></div>
+                </div>
+            </div>
+
+            <div id="checklist-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+        <!-- View: Day Details (Template) -->
+        <section id="view-day" class="view-section max-w-5xl mx-auto">
+            <div id="day-header" class="mb-10 border-b-2 border-dashed border-ocean/20 pb-8 flex flex-col md:flex-row gap-6 items-start md:items-center">
+                <!-- Populated by JS -->
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Timeline -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-2xl p-6 shadow-soft border border-ocean/10 sticky top-4">
+                        <h3 class="font-heading font-bold text-lg text-ink mb-6"><i class="fas fa-route text-ocean mr-2"></i>今日行程</h3>
+                        <div id="day-timeline" class="space-y-6">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Places & Food -->
+                <div class="lg:col-span-2">
+                    <div class="flex justify-between items-end mb-6">
+                        <h3 class="font-heading font-bold text-xl text-ink"><i class="fas fa-map-marked-alt text-sand mr-2"></i>探索與美食靈感 (10選)</h3>
+                        <!-- Simple Filter -->
+                        <div class="flex gap-2" id="place-filters">
+                            <button class="filter-btn active text-xs px-3 py-1 rounded-full bg-ink text-white font-bold transition" data-filter="all">全部</button>
+                            <button class="filter-btn text-xs px-3 py-1 rounded-full bg-paperDark text-ink/70 font-bold hover:bg-ocean/20 transition" data-filter="food">美食</button>
+                            <button class="filter-btn text-xs px-3 py-1 rounded-full bg-paperDark text-ink/70 font-bold hover:bg-ocean/20 transition" data-filter="sight">景點/購物</button>
+                        </div>
+                    </div>
+                    <div id="day-places" class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Application Logic & Data -->
+    <script>
+        // --- 1. Data Definitions (Updated with 10 places per day) ---
+        const DAYS_DATA = [
+            {
+                id: 'day1', num: '01', date: '7月2日', color: 'ocean', hex: '#5B92A5',
+                title: '啟程與抵達那霸', 
+                subtitle: '出發前往度假天堂沖繩！抵達並辦理入住後，首日晚上即沉浸在國際通的熱鬧氛圍中。',
+                intro: '抵達沖繩的第一天，重點在於安頓與感受市區活力。這份清單包含了機場到市區的動線，以及國際通周邊不可錯過的經典美食與宵夜選擇。',
+                itinerary: [
+                    { time: '16:15', text: '高雄國際機場 <span>(停留 03時30分)</span>', icon: '🛫', q: '高雄國際機場' },
+                    { time: '18:40', text: '那霸機場 <span>(停留 00時00分)</span>', icon: '🛬', q: '那霸機場' },
+                    { time: '19:08', text: '那霸STRATA酒店 <span>(停留 00時30分)</span>', icon: '🏨', q: 'Hotel Strata Naha' },
+                    { time: '19:48', text: '國際通 <span>(停留 02時30分)</span>', icon: '🛍️', q: '國際通' },
+                    { time: '22:27', text: '那霸STRATA酒店 <span>(停留 01時00分)</span>', icon: '🌙', q: 'Hotel Strata Naha' }
+                ],
+                places: [
+                    { name: '傑克牛排館', area: '旭橋', rating: 4.4, type: 'food', tags: '美式老牌牛排', desc: '沖繩牛排文化的經典代表！充滿濃濃的昭和復古美式風情。', recommend: '特選烤牛排 (Tenderloin)' },
+                    { name: 'ゆうなんぎい', area: '國際通', rating: 4.3, type: 'food', tags: '沖繩鄉土料理', desc: '開業超過50年的老字號居酒屋，想品嚐道地家常菜來這準沒錯。', recommend: '沖繩炒苦瓜、東坡肉' },
+                    { name: '暖暮拉麵 牧志店', area: '國際通', rating: 4.0, type: 'food', tags: '豚骨拉麵', desc: '九州拉麵名店，在沖繩極受台灣旅客歡迎，經常大排長龍。', recommend: '烈火拉麵、半熟蛋芝麻蔥拉麵' },
+                    { name: 'Blue Seal 國際通店', area: '國際通', rating: 4.2, type: 'food', tags: '冰淇淋', desc: '「出生於美國，成長於沖繩」的標誌性冰淇淋，必嚐在地限定口味。', recommend: '鹽金楚糕口味、紅芋口味' },
+                    { name: '大東麵 (Daito Soba)', area: '牧志', rating: 4.2, type: 'food', tags: '沖繩麵', desc: '麵條極具嚼勁，搭配軟嫩爌肉，是許多人心中的市區第一名。', recommend: '大東沖繩麵、大東壽司' },
+                    { name: 'Zooton\'s 久茂地店', area: '久茂地', rating: 4.4, type: 'food', tags: '手工漢堡', desc: '隱藏在巷弄中的超高評價漢堡店！手打漢堡排多汁美味。', recommend: '自製酪梨起司漢堡' },
+                    { name: 'Fukugiya 年輪蛋糕', area: '國際通', rating: 4.2, type: 'food', tags: '甜點伴手禮', desc: '走在國際通一定會被它的現烤香氣吸引。使用沖繩黑糖製作。', recommend: '黑糖年輪蛋糕 (ガジュマル)' },
+                    { name: '國際通屋台村', area: '國際通', rating: 4.0, type: 'food', tags: '屋台聚落', desc: '聚集了二十多間特色小店的露天美食街，氣氛熱絡，適合宵夜。', recommend: '各式串燒、Orion生啤酒' },
+                    { name: '唐吉訶德 國際通店', area: '國際通', rating: 4.1, type: 'sight', tags: '購物', desc: '24小時營業的血拚聖地！從零食到藥妝應有盡有。', recommend: '沖繩限定零食與熱門藥妝' },
+                    { name: '琉貿百貨 (RYUBO)', area: '縣廳前', rating: 4.1, type: 'sight', tags: '百貨商場', desc: '那霸市區唯一百貨，地下街有非常多精緻熟食與便當。', recommend: '地下美食街惣菜、文具雜貨' }
+                ]
+            },
+            {
+                id: 'day2', num: '02', date: '7月3日', color: 'mint', hex: '#679B83',
+                title: '中北部與美國村',
+                subtitle: '早晨走訪安良波海灘與美國村，體驗青洞潛水與琉球村，傍晚至Rycom血拚並享用阿古豬火鍋。',
+                intro: '第二天行程十分豐富！離開市區感受沖繩的中部風情，涵蓋了海灘漫步、水下潛水體驗、文化村落，最後以大型購物中心與當地著名的阿古豬火鍋完美收尾。',
+                itinerary: [
+                    { time: '09:00', text: '那霸STRATA酒店 <span>(停留 00時10分)</span>', icon: '☀️', q: 'Hotel Strata Naha' },
+                    { time: '09:42', text: '安良波海灘 <span>(停留 00時30分)</span>', icon: '🏖️', q: '安良波海灘' },
+                    { time: '10:19', text: '美國村 <span>(停留 01時30分)</span>', icon: '🎡', q: '美浜美國村' },
+                    { time: '11:53', text: 'A&W 美浜店 <span>(停留 01時00分)</span>', icon: '🍔', q: 'A&W 美浜店' },
+                    { time: '13:23', text: '黑潮潛水｜沖繩青洞 <span>(停留 00時10分)</span>', icon: '🤿', q: '黑潮潛水' },
+                    { time: '13:45', text: '琉球村 <span>(停留 02時00分)</span>', icon: '🏯', q: '琉球村' },
+                    { time: '16:01', text: 'Hoshino Resorts BANTA CAFE <span>(停留 01時00分)</span>', icon: '☕', q: 'Hoshino Resorts BANTA CAFE' },
+                    { time: '17:41', text: 'AEON MALL Okinawa Rycom <span>(停留 01時30分)</span>', icon: '🏬', q: 'AEON MALL Okinawa Rycom' },
+                    { time: '19:24', text: 'Itoya（阿古豬火鍋） <span>(停留 01時40分)</span>', icon: '🍲', q: 'Itoya 阿古豬火鍋' },
+                    { time: '22:20', text: 'Churasun6okinawa <span>(停留 01時00分)</span>', icon: '🏠', q: 'Churasun6okinawa' }
+                ],
+                places: [
+                    { name: 'Taco Rice Cafe Kijimuna', area: '美國村', rating: 4.4, type: 'food', tags: '塔可飯', desc: '將沖繩美食「塔可飯」加上滑嫩歐姆蛋，創造出超人氣的歐姆塔可飯。', recommend: '酪梨歐姆塔可飯' },
+                    { name: 'Zhyvago Coffee Works', area: '美國村', rating: 4.6, type: 'food', tags: '海景咖啡', desc: '美國村最具質感的工業風咖啡館。伴隨一杯好咖啡與無敵海景。', recommend: '冰拿鐵、手工巧克力軟餅乾' },
+                    { name: '琉球之牛 北谷店', area: '美國村', rating: 4.4, type: 'food', tags: '頂級燒肉', desc: '油花分佈完美的頂級縣產和牛，入口即化，建議提前訂位。', recommend: '頂級縣產和牛套餐' },
+                    { name: 'A&W 北谷店', area: '北谷', rating: 4.1, type: 'food', tags: '美式速食', desc: '沖繩獨有的美式速食品牌。麥根沙士在店內可以無限續杯！', recommend: 'A&W雙層起司堡、麥根沙士' },
+                    { name: 'Seaside Cafe Hanon', area: '美國村', rating: 4.4, type: 'food', tags: '海景鬆餅', desc: '純白希臘風格打造的鬆餅專賣店，陽台座位直面大海，口感綿密。', recommend: '焦糖香蕉舒芙蕾鬆餅' },
+                    { name: 'Blue Ocean Steak', area: '北谷', rating: 4.6, type: 'food', tags: '鐵板牛排', desc: '評價極高的高級牛排館，提供高品質的和牛與龍蝦，可賞夕陽。', recommend: '黑毛和牛沙朗、蒜香龍蝦' },
+                    { name: '海人食堂', area: '讀谷村', rating: 4.2, type: 'food', tags: '漁港海鮮', desc: '讀谷村都屋漁港旁，提供產地直銷、便宜又大碗的新鮮生魚片。', recommend: '海人丼、炸近海魚定食' },
+                    { name: 'Timeless Chocolate', area: '美國村', rating: 4.5, type: 'food', tags: '精品巧克力', desc: '沖繩第一家「Bean to Bar」巧克力，結合沖繩黑糖與純可可。', recommend: '黑糖單品巧克力、特濃熱可可' },
+                    { name: '星野 BANTA CAFE', area: '讀谷村', rating: 4.4, type: 'sight', tags: '絕景海濱', desc: '日本國內最大規模海景咖啡廳！依自然岩石海岸而建。', recommend: '泡泡果凍汽水、絕美海景' },
+                    { name: 'KOJIMA x BicCamera', area: 'AEON Rycom', rating: 4.0, type: 'sight', tags: '大型家電', desc: '在Rycom逛商場也能順便買電器！針對觀光客常有折扣與免稅。', recommend: '美容家電、最新相機' }
+                ]
+            },
+            {
+                id: 'day3', num: '03', date: '7月4日', color: 'sand', hex: '#D4A373',
+                title: '北部絕景與煙火',
+                subtitle: '一路向北！經過許田休息站、古宇利島，下午漫遊美麗海水族館，晚上欣賞絢爛煙火。',
+                intro: '第三天深入沖繩北部。這裡有最清澈的海水(古宇利島)與必訪的美麗海水族館。傍晚留在海洋博公園，享受夏日專屬的燦爛煙火。',
+                itinerary: [
+                    { time: '08:00', text: '那霸STRATA酒店 <span>(停留 01時00分)</span>', icon: '🚗', q: 'Hotel Strata Naha' },
+                    { time: '10:04', text: '許田休息站 <span>(停留 00時40分)</span>', icon: '🏪', q: '道の駅 許田' },
+                    { time: '11:24', text: '古宇利島 <span>(停留 02時00分)</span>', icon: '🏝️', q: '古宇利島' },
+                    { time: '14:00', text: '沖繩美麗海水族館 <span>(停留 03時00分)</span>', icon: '🐬', q: '沖繩美麗海水族館' },
+                    { time: '19:00', text: '海洋博公園 (20:00煙火) <span>(停留 02時00分)</span>', icon: '🎆', q: '海洋博公園' }
+                ],
+                places: [
+                    { name: 'Kouri Shrimp', area: '古宇利島', rating: 4.4, type: 'food', tags: '蒜香蝦', desc: '夏威夷經典的蒜香奶油蝦配上白飯，香氣濃郁到讓人停不下來。', recommend: '原味蒜蓉蝦蝦飯' },
+                    { name: '岸本食堂', area: '本部町', rating: 4.3, type: 'food', tags: '百年沖繩麵', desc: '使用柴灰製作傳統麵條，湯頭有著獨特的木柴香氣與濃郁鰹魚味。', recommend: '沖繩麵、沖繩炊飯' },
+                    { name: '花人逢', area: '本部町', rating: 4.4, type: 'food', tags: '海景披薩', desc: '位於半山腰的古民家，吃著熱騰騰披薩俯瞰瀨底島絕美海景。', recommend: '綜合熱烤披薩' },
+                    { name: 'Captain Kangaroo', area: '名護', rating: 4.6, type: 'food', tags: '浮誇漢堡', desc: '被無數網友評為「沖繩最好吃的漢堡」！漢堡肉厚實，配料如山。', recommend: 'Sparky 炸洋蔥圈起司漢堡' },
+                    { name: '百年古家 大家', area: '名護', rating: 4.2, type: 'food', tags: '阿古豬', desc: '百年古宅改建，伴隨流水瀑布造景。阿古豬涮涮鍋非常出名。', recommend: '阿古豬特極涮涮鍋' },
+                    { name: 'Shirasa 食堂', area: '古宇利島', rating: 4.3, type: 'food', tags: '海膽蓋飯', desc: '古宇利島以盛產海膽聞名。這家老牌食堂提供奢華的海膽蓋飯！', recommend: '海膽海葡萄雙拼蓋飯' },
+                    { name: 'Ocean Blue Cafe', area: '水族館內', rating: 4.2, type: 'food', tags: '水族箱咖啡', desc: '位於「黑潮之海」水槽旁，一邊喝咖啡一邊看鯨鯊優游，極致夢幻。', recommend: '藍色海洋拿鐵' },
+                    { name: '名護漁港食堂', area: '名護漁港', rating: 4.1, type: 'food', tags: '海鮮定食', desc: '漁會直營！沒有華麗裝潢，只有最新鮮、大份量且價格佛心的定食。', recommend: '每日特上海鮮丼、炸魚定食' },
+                    { name: 'Yanbaru Gelato', area: '名護', rating: 4.4, type: 'food', tags: '義式冰淇淋', desc: '曾獲世界大賽殊榮！使用沖繩山原產的水果精心製作，果香濃郁。', recommend: '山原香檸口味、西瓜口味' },
+                    { name: '古宇利海洋塔', area: '古宇利島', rating: 4.1, type: 'sight', tags: '展望台', desc: '擁有島上最高的制高點視野，適合享用下午茶並欣賞漸層海色。', recommend: '島南瓜布丁與高空海景' }
+                ]
+            },
+            {
+                id: 'day4', num: '04', date: '7月5日', color: 'coral', hex: '#E48E8C',
+                title: '地底奇景與血拚',
+                subtitle: '早上探索壯麗的鐘乳石奇景「玉泉洞」，下午前往PARCO CITY享用敘敘苑燒肉並盡情購物。',
+                intro: '第四天的行程涵蓋了南部的大自然奇景與西海岸的超大型購物中心。玉泉洞能讓您一探沖繩地底奧秘，隨後前往PARCO CITY品嚐頂級燒肉。',
+                itinerary: [
+                    { time: '09:00', text: '那霸STRATA酒店 <span>(停留 00時00分)</span>', icon: '☀️', q: 'Hotel Strata Naha' },
+                    { time: '09:33', text: '玉泉洞 <span>(停留 02時10分)</span>', icon: '🦇', q: '玉泉洞' },
+                    { time: '12:18', text: '敘敘苑 浦添PARCO CITY店 <span>(停留 02時00分)</span>', icon: '🥩', q: '敘敘苑 沖繩浦添' },
+                    { time: '14:22', text: 'SAN-A浦添西海岸 PARCO CITY <span>(停留 01時20分)</span>', icon: '🏬', q: 'SAN-A浦添西海岸 PARCO CITY' }
+                ],
+                places: [
+                    { name: '敘敘苑 (浦添店)', area: '浦添市', rating: 4.5, type: 'food', tags: '頂級燒肉', desc: '日本全國知名的高級燒肉店，午間套餐價格親民且份量十足。', recommend: '超值午間燒肉套餐' },
+                    { name: 'oHacorte本店', area: '浦添市', rating: 4.4, type: 'food', tags: '水果塔', desc: '隱身在美軍老眷村的超人氣甜點店，新鮮水果塔精緻如藝術品。', recommend: '季節限定水果塔' },
+                    { name: 'Cafe Kurukuma', area: '南城市', rating: 4.4, type: 'food', tags: '海景泰式', desc: '南部最著名的無敵海景餐廳！能將太平洋盡收眼底。', recommend: '特製綜合泰式咖哩' },
+                    { name: '中本鮮魚天婦羅店', area: '奧武島', rating: 4.2, type: 'food', tags: '沖繩天婦羅', desc: '南部奧武島的名店，天婦羅麵衣厚實鬆軟，價格極其便宜。', recommend: '炸水雲(海髮菜)、炸花枝' },
+                    { name: '濱邊的茶屋', area: '南城市', rating: 4.4, type: 'food', tags: '沙灘咖啡', desc: '沖繩海景咖啡館的先驅。漲潮時海水就在窗戶正下方，氣氛無與倫比。', recommend: '手作起司蛋糕、扶桑花茶' },
+                    { name: '黑糖可麗露 ほうき星', area: '港川外人住宅', rating: 4.5, type: 'food', tags: '精緻甜點', desc: '本店氣氛復古可愛，黑糖可麗露外酥內軟，是必備的打卡甜點。', recommend: '多良間島黑糖原味可麗露' },
+                    { name: '博多一風堂', area: 'PARCO CITY', rating: 4.1, type: 'food', tags: '豚骨拉麵', desc: '在購物商場內想快速吃一碗熱騰騰的美食，享譽國際的一風堂是絕佳選擇。', recommend: '白丸元味、特製赤丸新味' },
+                    { name: '糸滿魚市場', area: '糸滿市', rating: 4.3, type: 'food', tags: '海鮮小吃', desc: '南部吃海鮮聖地！販售一盤盤切好的生魚片、焗烤龍蝦，可直接立吞。', recommend: '鮮甜干貝串、焗烤明太子龍蝦' },
+                    { name: 'Cave Cafe', area: '南城市', rating: 4.3, type: 'sight', tags: '鐘乳石咖啡', desc: '位於天然鐘乳石洞內的咖啡廳！氣氛神祕沁涼。', recommend: '35 COFFEE (珊瑚烘焙咖啡)' },
+                    { name: 'MUJI 無印良品', area: 'PARCO CITY', rating: 4.5, type: 'sight', tags: '生活雜貨', desc: '沖繩最大規模的無印良品！商品齊全，還有無印良品食堂可以看海用餐。', recommend: '沖繩限定商品、Café&Meal' }
+                ]
+            },
+            {
+                id: 'day5', num: '05', date: '7月6日', color: 'sky', hex: '#84BACC',
+                title: '市區巡禮與賦歸',
+                subtitle: '早上走訪牧志市場與首里城，品嚐炸豬排後前往機場準備返台。',
+                intro: '最後一天的重點是體驗在地市井文化與歷史古蹟。從牧志市場的早晨開始，走訪達磨寺與首里城，最後至機場採購伴手禮，為沖繩之旅劃下完美句點。',
+                itinerary: [
+                    { time: '09:00', text: '那霸STRATA酒店 <span>(停留 00時30分)</span>', icon: '🏨', q: 'Hotel Strata Naha' },
+                    { time: '09:45', text: '第一牧志公設市場 <span>(停留 01時10分)</span>', icon: '🦀', q: '第一牧志公設市場' },
+                    { time: '10:56', text: 'Pork Tamago Onigiri <span>(停留 00時30分)</span>', icon: '🍙', q: 'Pork Tamago Onigiri Makishi Market' },
+                    { time: '11:27', text: '沖縄とんかつ小やじ那覇店 <span>(停留 01時00分)</span>', icon: '🍱', q: '沖縄とんかつ小やじ那覇店' },
+                    { time: '12:52', text: '西來院 (達磨寺) <span>(停留 00時40分)</span>', icon: '⛩️', q: '西來院' },
+                    { time: '13:41', text: '首里城 <span>(停留 01時30分)</span>', icon: '🏯', q: '首里城' },
+                    { time: '17:00', text: '那霸機場 <span>(停留 02時45分)</span>', icon: '🛫', q: '那霸機場' },
+                    { time: '20:30', text: '高雄國際機場 <span>(停留 01時00分)</span>', icon: '🛬', q: '高雄國際機場' }
+                ],
+                places: [
+                    { name: '豬肉蛋飯糰 本店', area: '牧志市場', rating: 4.4, type: 'food', tags: '沖繩飯糰', desc: '最經典的排隊名店，熱騰騰的午餐肉與厚煎蛋完美結合。', recommend: '炸蝦豬肉蛋飯糰' },
+                    { name: '沖縄とんかつ小やじ', area: '牧志', rating: 4.5, type: 'food', tags: '日式炸豬排', desc: '隱身那霸市區的高評價炸豬排專賣店，肉質軟嫩多汁，麵衣金黃酥脆。', recommend: '特選里肌炸豬排定食' },
+                    { name: '首里蕎麥麵', area: '首里', rating: 4.4, type: 'food', tags: '手打麵', desc: '首里城周邊極度受歡迎的手打沖繩麵，每日限量賣完為止！', recommend: '限量首里沖繩麵' },
+                    { name: '琉球茶坊', area: '首里', rating: 4.3, type: 'food', tags: '琉球庭園料理', desc: '傳統古民家改建，坐在緣廊面對著枯山水庭園吃著傳統料理，非常有氣氛。', recommend: '墨魚汁炒麵、琉球定食' },
+                    { name: '市場2樓食堂', area: '牧志市場', rating: 4.1, type: 'food', tags: '海鮮代工', desc: '一樓挑選生猛海鮮後拿到二樓代客烹調，感受最接地氣的文化。', recommend: '夜光貝、沖繩近海魚' },
+                    { name: '大東壽司 機場便當版', area: '那霸機場', rating: 4.3, type: 'food', tags: '機場便當', desc: '常被秒殺的夢幻空弁！由大東壽司特製的醬油醃漬魚肉握壽司，帶上飛機吃超幸福。', recommend: '大東壽司便當' },
+                    { name: 'Jimmy\'s 那霸機場店', area: '那霸機場', rating: 4.3, type: 'food', tags: '美式烘焙', desc: '沖繩老牌美式超市品牌。大蒜麵包與美式磅蛋糕是非常受歡迎的伴手禮。', recommend: '香濃大蒜抹醬麵包、蘋果派' },
+                    { name: '御菓子御殿 機場店', area: '那霸機場', rating: 4.5, type: 'sight', tags: '伴手禮', desc: '沖繩無人不知的代表性伴手禮。生紅芋塔更是隱藏版美味。', recommend: '生紅芋塔(需冷藏)' },
+                    { name: 'Royce\' 石垣島', area: '機場免稅店', rating: 4.6, type: 'sight', tags: '限定巧克力', desc: '只有在沖繩才買得到的限定版！融合石垣島海鹽與黑糖的特殊風味。', recommend: '石垣島海鹽生巧克力' },
+                    { name: 'Coralway', area: '那霸機場', rating: 4.2, type: 'sight', tags: '精選伴手禮', desc: '可以買到許多沖繩限定的文創小物、零食，甚至還有石垣島辣油。', recommend: '邊銀食堂石垣島辣油' }
+                ]
+            }
+        ];
+
+        const CHECKLIST_DATA = [
+            { category: '核心證件', items: ['護照正本 (效期>6個月)', '電子簽證 / VJW 截圖', '機票與住宿憑證', '台灣駕照+日文譯本 (租車用)'] },
+            { category: '電子與金融', items: ['行動電源 (放隨身包)', '充電線組', '少量日幣現鈔', '雙幣/海外回饋信用卡', '網路卡 / eSIM'] },
+            { category: '生活與藥品', items: ['常備藥 (感冒/腸胃/止痛)', '個人盥洗用品 (環保)', '防曬乳、太陽眼鏡', '好走路的便鞋'] }
+        ];
+
+        // --- 2. State Management ---
+        let state = {
+            currentView: 'view-overview',
+            checklist: JSON.parse(localStorage.getItem('ok_checklist')) || {},
+            currentDayId: null,
+            placeFilter: 'all'
+        };
+
+        // --- 3. Initialization & Navigation ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initSidebar();
+            initOverview();
+            renderChecklist();
+            
+            // Setup Nav Clicks
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const target = e.currentTarget.dataset.target;
+                    const dayId = e.currentTarget.dataset.day;
+                    
+                    // Update UI active states
+                    document.querySelectorAll('.nav-btn').forEach(b => {
+                        b.classList.remove('active-nav', 'bg-white', 'shadow-card', 'text-ink');
+                        b.classList.add('text-ink/70');
+                    });
+                    e.currentTarget.classList.add('active-nav', 'bg-white', 'shadow-card', 'text-ink');
+                    e.currentTarget.classList.remove('text-ink/70');
+
+                    // Handle View Switching
+                    switchView(target, dayId);
+
+                    // Close mobile menu
+                    if(window.innerWidth <= 768) toggleMobileMenu();
+                });
+            });
+
+            // Mobile menu toggles
+            document.getElementById('menuBtn').addEventListener('click', toggleMobileMenu);
+            document.getElementById('overlay').addEventListener('click', toggleMobileMenu);
+        });
+
+        function initSidebar() {
+            const container = document.getElementById('nav-days-container');
+            DAYS_DATA.forEach(day => {
+                const btn = document.createElement('button');
+                btn.className = `nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-white hover:text-ink hover:shadow-card transition-all flex items-center gap-3 text-ink/70 font-sans text-sm`;
+                btn.dataset.target = 'view-day';
+                btn.dataset.day = day.id;
+                btn.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-${day.color} shadow-sm border border-white"></span> <span class="font-bold">${day.date}</span> <span class="truncate">${day.title.split('與')[0]}</span>`;
+                container.appendChild(btn);
+            });
+        }
+
+        function switchView(targetId, dayId = null) {
+            // Hide all
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            
+            // Show target
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) targetEl.classList.add('active');
+
+            // Handle specific view logic
+            if (targetId === 'view-day' && dayId) {
+                state.currentDayId = dayId;
+                state.placeFilter = 'all'; // reset filter
+                renderDayView(dayId);
+            }
+            
+            // Scroll to top
+            document.getElementById('main-content').scrollTop = 0;
+        }
+
+        function toggleMobileMenu() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+
+        // --- 4. Overview Logic (APIs & Chart) ---
+        function initOverview() {
+            // Countdown
+            const targetDate = new Date('2026-07-02T00:00:00+08:00').getTime();
+            setInterval(() => {
+                const now = new Date().getTime();
+                const d = Math.max(0, Math.ceil((targetDate - now) / (1000 * 60 * 60 * 24)));
+                document.getElementById('countdown-display').innerText = d > 0 ? `${d} Days` : '出發！';
+            }, 1000);
+
+            // Fetch APIs
+            fetchWeatherAndMarine();
+            fetchCurrency();
+        }
+
+        async function fetchWeatherAndMarine() {
+            try {
+                // Using Open-Meteo for Naha
+                const url = 'https://api.open-meteo.com/v1/forecast?latitude=26.2124&longitude=127.6809&daily=temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo';
+                const marineUrl = 'https://marine-api.open-meteo.com/v1/marine?latitude=26.2124&longitude=127.6809&daily=wave_height_max&timezone=Asia%2FTokyo';
+                
+                const [weatherRes, marineRes] = await Promise.all([fetch(url), fetch(marineUrl)]);
+                const weatherData = await weatherRes.json();
+                const marineData = await marineRes.json();
+
+                renderWeatherChart(weatherData.daily);
+                renderMarineData(marineData.daily);
+            } catch (e) {
+                console.error("API Error", e);
+                document.getElementById('marine-data').innerHTML = '<span class="text-coral">無法取得資料，請檢查網路連線。</span>';
+            }
+        }
+
+        function renderWeatherChart(data) {
+            const ctx = document.getElementById('weatherChart').getContext('2d');
+            const dates = data.time.map(d => d.slice(5).replace('-','/')); // MM/DD
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        {
+                            label: '最高溫 (°C)',
+                            data: data.temperature_2m_max,
+                            borderColor: '#E48E8C', // coral
+                            backgroundColor: 'rgba(228, 142, 140, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.4,
+                            fill: true,
+                            pointBackgroundColor: '#fff'
+                        },
+                        {
+                            label: '最低溫 (°C)',
+                            data: data.temperature_2m_min,
+                            borderColor: '#5B92A5', // ocean
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.4,
+                            pointBackgroundColor: '#fff'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { family: "'Noto Sans TC', sans-serif" } } },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        y: { 
+                            suggestedMin: Math.min(...data.temperature_2m_min) - 2,
+                            suggestedMax: Math.max(...data.temperature_2m_max) + 2,
+                            grid: { color: 'rgba(31, 63, 73, 0.05)' }
+                        },
+                        x: { grid: { display: false } }
+                    },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false }
+                }
+            });
+        }
+
+        function renderMarineData(data) {
+            const container = document.getElementById('marine-data');
+            let html = '';
+            for(let i=0; i<Math.min(7, data.time.length); i++) {
+                const date = data.time[i].slice(5).replace('-','/');
+                const wave = data.wave_height_max[i];
+                let icon = wave < 1.0 ? '🤿' : (wave > 1.5 ? '⚠️' : '🌊');
+                let color = wave < 1.0 ? 'text-mint' : (wave > 1.5 ? 'text-coral' : 'text-ocean');
+                
+                html += `
+                    <div class="flex flex-col items-center min-w-[60px] bg-paperDark/50 p-2 rounded-lg border border-white">
+                        <span class="text-xs font-mono text-ink/60 mb-1">${date}</span>
+                        <span class="text-xl mb-1">${icon}</span>
+                        <span class="font-mono font-bold text-sm ${color}">${wave ? wave.toFixed(1)+'m' : '-'}</span>
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        async function fetchCurrency() {
+            try {
+                const res = await fetch('https://api.exchangerate-api.com/v4/latest/JPY');
+                const data = await res.json();
+                const rate = data.rates.TWD;
+                document.getElementById('rateUpdate').innerText = `匯率: ${rate.toFixed(4)}`;
+                
+                const jpyIn = document.getElementById('jpyInput');
+                const twdOut = document.getElementById('twdOutput');
+                
+                const update = () => twdOut.value = Math.round((jpyIn.value || 0) * rate).toLocaleString();
+                jpyIn.addEventListener('input', update);
+                update();
+            } catch (e) {
+                document.getElementById('rateUpdate').innerText = `無法取得匯率`;
+            }
+        }
+
+        // --- 5. Checklist Logic ---
+        function renderChecklist() {
+            const container = document.getElementById('checklist-container');
+            container.innerHTML = '';
+            let total = 0;
+            let checkedCount = 0;
+
+            CHECKLIST_DATA.forEach((cat, cIdx) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white/80 backdrop-blur-md border border-ocean/10 p-5 rounded-2xl shadow-card shape-card transform transition hover:-translate-y-1';
+                
+                let itemsHtml = '';
+                cat.items.forEach((item, iIdx) => {
+                    total++;
+                    const id = `chk-${cIdx}-${iIdx}`;
+                    const isChecked = state.checklist[id];
+                    if(isChecked) checkedCount++;
+                    
+                    itemsHtml += `
+                        <label class="flex items-start gap-3 p-2 rounded hover:bg-paperDark/50 cursor-pointer transition ${isChecked ? 'checked-item' : ''}">
+                            <input type="checkbox" class="mt-1 w-4 h-4" data-id="${id}" ${isChecked ? 'checked' : ''} onchange="handleCheck(this)">
+                            <span class="text-sm font-sans flex-1">${item}</span>
+                        </label>
+                    `;
+                });
+
+                card.innerHTML = `<h3 class="font-heading font-bold text-ink mb-4 border-b border-dashed border-ocean/20 pb-2"><i class="fas fa-check-circle text-sand mr-2"></i>${cat.category}</h3><div class="space-y-1">${itemsHtml}</div>`;
+                container.appendChild(card);
+            });
+
+            updateProgress(checkedCount, total);
+        }
+
+        window.handleCheck = function(cb) {
+            state.checklist[cb.dataset.id] = cb.checked;
+            localStorage.setItem('ok_checklist', JSON.stringify(state.checklist));
+            // Toggle visual class on parent label
+            cb.parentElement.classList.toggle('checked-item', cb.checked);
+            
+            // Recalc
+            const total = document.querySelectorAll('#checklist-container input[type="checkbox"]').length;
+            const checked = document.querySelectorAll('#checklist-container input[type="checkbox"]:checked').length;
+            updateProgress(checked, total);
+        }
+
+        function updateProgress(checked, total) {
+            const pct = total === 0 ? 0 : Math.round((checked / total) * 100);
+            document.getElementById('progress-bar').style.width = `${pct}%`;
+            document.getElementById('progress-text').innerText = `${pct}%`;
+        }
+
+        // --- 6. Day Detail Logic ---
+        function renderDayView(dayId) {
+            const day = DAYS_DATA.find(d => d.id === dayId);
+            if(!day) return;
+
+            // 1. Header
+            document.getElementById('day-header').innerHTML = `
+                <div class="w-20 h-20 bg-${day.color} text-white rounded-2xl shadow-md flex flex-col items-center justify-center flex-shrink-0 transform rotate-3">
+                    <span class="font-heading font-black text-2xl leading-none">${day.num}</span>
+                    <span class="font-mono text-xs tracking-widest">DAY</span>
+                </div>
+                <div>
+                    <div class="text-${day.color} font-mono font-bold text-sm mb-1">${day.date}</div>
+                    <h2 class="font-heading font-black text-2xl md:text-4xl text-ink mb-2">${day.title}</h2>
+                    <p class="font-serif text-ink/70 leading-relaxed max-w-2xl">${day.intro}</p>
+                </div>
+            `;
+
+            // 2. Timeline
+            const tlContainer = document.getElementById('day-timeline');
+            tlContainer.innerHTML = day.itinerary.map(it => `
+                <div class="timeline-item relative pl-10">
+                    <div class="timeline-line"></div>
+                    <div class="absolute left-0 top-0 w-8 h-8 bg-white border-2 border-${day.color}/50 rounded-full flex items-center justify-center shadow-sm z-10 text-sm">${it.icon}</div>
+                    <div class="bg-paper border border-ocean/5 p-3 rounded-xl shadow-sm hover:shadow-md transition">
+                        <div class="font-mono font-bold text-${day.color} text-sm mb-1">${it.time}</div>
+                        <div class="font-sans font-bold text-ink">${it.text}</div>
+                        <a href="https://google.com/maps/search/?api=1&query=${encodeURIComponent(it.q + ' 沖繩')}" target="_blank" class="inline-block mt-2 text-xs text-ink/50 hover:text-${day.color}"><i class="fas fa-map-marker-alt"></i> 地圖導航</a>
+                    </div>
+                </div>
+            `).join('');
+
+            // 3. Places setup
+            setupPlaceFilters(day);
+            renderPlaces(day);
+        }
+
+        function setupPlaceFilters(day) {
+            const filterBtns = document.querySelectorAll('#place-filters .filter-btn');
+            filterBtns.forEach(btn => {
+                btn.onclick = (e) => {
+                    filterBtns.forEach(b => {
+                        b.classList.remove('bg-ink', 'text-white');
+                        b.classList.add('bg-paperDark', 'text-ink/70');
+                    });
+                    e.currentTarget.classList.add('bg-ink', 'text-white');
+                    e.currentTarget.classList.remove('bg-paperDark', 'text-ink/70');
+                    
+                    state.placeFilter = e.currentTarget.dataset.filter;
+                    renderPlaces(day);
+                };
+            });
+            // Reset to 'all' visually on day change
+            filterBtns[0].click(); 
+        }
+
+        function renderPlaces(day) {
+            const container = document.getElementById('day-places');
+            let filtered = day.places;
+            if(state.placeFilter !== 'all') {
+                filtered = day.places.filter(p => p.type === state.placeFilter);
+            }
+
+            if(filtered.length === 0) {
+                container.innerHTML = '<div class="col-span-2 text-center py-10 text-ink/40">沒有符合分類的項目</div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(p => {
+                const tagColor = p.type === 'food' ? 'sand' : 'ocean';
+                return `
+                <div class="bg-white rounded-2xl p-5 shadow-card hover:shadow-card-hover border border-ocean/5 transition-all transform hover:-translate-y-1 flex flex-col h-full">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <span class="text-[0.65rem] font-bold tracking-wider text-${day.color} uppercase"><i class="fas fa-map-pin mr-1"></i>${p.area}</span>
+                            <h4 class="font-heading font-black text-lg text-ink leading-tight mt-1">${p.name}</h4>
+                            <span class="inline-block mt-1 text-xs bg-${tagColor}/10 text-${tagColor} px-2 py-0.5 rounded">${p.tags}</span>
+                        </div>
+                        <div class="bg-paperDark text-ink font-mono font-bold text-sm px-2 py-1 rounded shadow-inner flex items-center gap-1 shrink-0">
+                            ${p.rating} <i class="fas fa-star text-sand text-[0.6rem]"></i>
+                        </div>
+                    </div>
+                    <p class="font-serif text-sm text-ink/70 mb-4 flex-1">${p.desc}</p>
+                    <div class="bg-paper/50 border-l-2 border-${day.color} p-3 rounded-r mt-auto">
+                        <div class="text-xs font-bold text-${day.color} mb-1">推薦亮點</div>
+                        <div class="text-sm font-sans font-medium text-ink">${p.recommend}</div>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+    </script>
+</body>
+</html>
